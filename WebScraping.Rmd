@@ -1,0 +1,167 @@
+---
+title: "Web Scraping"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(tidyverse) # data wrangling
+library(rvest) # parsing html files
+library(stringr) #string manipulation
+library(lubridate) # date time manipulation
+```
+
+
+```{r}
+url <- "https://www.trustpilot.com/review/www.zomato.com"
+html <- read_html(url)
+class(html)
+
+```
+
+scrape_data <- function(url,organisation_name){
+
+//read first page
+//Extract the total number of pages of reviews
+//Generate the urls for all pages
+//Extract data from each page and rbind to one table
+//write to csv
+}
+
+### Extract the total number of pages of reviews
+```{r}
+
+get_last_page_number <- function(html) {
+  pages_data <- html %>% html_node("head") %>% 
+    html_nodes("title") %>% 
+    html_text() # extract title
+
+  #using regex extract the last page number
+  pattern <- "(\\d{1,3})\\s*of\\s*(\\d{1,3})$"
+  res <- str_match(pages_data, pattern)
+  #convert to number
+  as.numeric(res[,3]) 
+
+}
+
+```
+
+### Generate the list of urls
+```{r}
+list_of_pages <- page_two <- str_c(url,'?page=', 1:last_page)
+list_of_pages
+```
+
+### Extract the data from one page
+The data that we are interested in are name of reviewer,date, rating, review text
+```{r}
+#name of reviewer
+get_reviewer_names <- function(html){
+      html %>% 
+        html_nodes('.consumer-information__name') %>% 
+        html_text() %>% 
+        str_trim() %>% 
+        unlist()
+}
+get_reviewer_names(html)
+
+#rating
+get_star_rating <- function(html){
+  
+  pattern = 'star-rating star-rating-(\\d)'  
+  
+  ratings <- html %>% html_nodes(".star-rating") %>%
+    html_attrs() %>%
+    
+    # Apply the pattern match to all attributes
+    map(str_match, pattern = pattern) %>%
+    map(2) %>%
+    unlist()
+  
+  
+  #Leave the first instance as its not part of the data
+  ratings[3:length(ratings)]
+}
+get_star_rating(html)
+
+
+#review text
+get_reviews <- function(html){
+  x <- html %>% html_nodes(".review-content__text") %>%
+    html_text() %>% str_trim()
+  x
+}
+
+#review date
+get_review_dates <- function(html){
+  
+  pattern <- "(\\d{4})-(0?[1-9]|1[012])-(0?[1-9]|[12][0-9]|3[01])*"
+  x <- html %>% html_nodes(".review-content-header") %>%
+    html_text()%>% str_trim() %>% str_match(pattern) 
+
+  y <- x[,1]
+  
+}
+```
+
+
+
+### Get data
+```{r}
+get_data_table <- function(html,firm_name){
+  
+  # Extract the Basic information from the HTML
+      reviews <- get_reviews(html)
+      reviewer_names <- get_reviewer_names(html)
+      dates <- get_review_dates(html)
+      ratings <- get_star_rating(html)
+      
+  # Combine into a tibble
+      
+      combined_data <- data.frame(reviewer = reviewer_names,
+                              date = dates,
+                              rating = ratings,
+                              review = reviews) 
+      
+  # Wrap the data with the company name
+      combined_data <- combined_data %>% 
+        mutate(company = firm_name) %>%
+        select (company,reviewer,rating, date, review)
+      combined_data
+}
+
+get_data_table(html,"Zomato")
+```
+
+### Get the data from a url
+```{r}
+get_data_from_url <- function(url,firm_name){
+  html <- read_html(url)
+  get_data_table(html,firm_name)
+}
+
+get_data_from_url(url,"Zomato")
+```
+
+### Data from all pages
+```{r}
+scrape_data <- function(url,firm_name){
+
+#Extract the total number of pages of reviews
+  #total page info is found in pages from 2.
+  page_two <- str_c(url,'?page=', 2)
+  last_page <- get_last_page_number(read_html(page_two))
+  
+#Generate the urls for all pages
+  list_of_pages <- page_two <- str_c(url,'?page=', 1:last_page)
+#Extract data from each page and rbind to one table
+  data <- list_of_pages %>%
+    map(get_data_from_url,firm_name) %>%  # apply to all urls
+    bind_rows
+  data
+}
+
+scrape_data(url,"Zomato")
+```
+
